@@ -4,111 +4,153 @@
  * Департамент по чрезвычайным ситуациям города Павлодар
  */
 
-import { useState, useEffect } from 'react'
-import { Header } from '@/components/Header'
-import { WeatherForm } from '@/components/WeatherForm'
-import { PredictionResultView } from '@/components/PredictionResult'
-import { RiskMap } from '@/components/RiskMap'
-import { TrendChart, WeatherChart, DangerDistributionChart, StatisticsCards } from '@/components/Charts'
-import { HistoryTable } from '@/components/HistoryTable'
-import { FileUpload } from '@/components/FileUpload'
-import { DangerIndicator } from '@/components/DangerIndicator'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { useState, useEffect } from "react";
+import { Header } from "@/components/Header";
+import { WeatherForm } from "@/components/WeatherForm";
+import { PredictionResultView } from "@/components/PredictionResult";
+import { RiskMap } from "@/components/RiskMap";
+import {
+  TrendChart,
+  WeatherChart,
+  DangerDistributionChart,
+  StatisticsCards,
+} from "@/components/Charts";
+import { HistoryTable } from "@/components/HistoryTable";
+import { FileUpload } from "@/components/FileUpload";
+import { DangerIndicator } from "@/components/DangerIndicator";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   usePrediction,
   useHistory,
   useZones,
   useStatistics,
   useFileUpload,
-  useExport
-} from '@/hooks/useApi'
-import type { WeatherData, PredictionResult, RiskZone, HistoricalRecord, DangerLevel } from '@/types'
-import { LayoutDashboard, FormInput, Map, BarChart3, History, Upload, FileText } from 'lucide-react'
+  useExport,
+} from "@/hooks/useApi";
+import type {
+  WeatherData,
+  PredictionResult,
+  RiskZone,
+  HistoricalRecord,
+  DangerLevel,
+} from "@/types";
+import {
+  LayoutDashboard,
+  FormInput,
+  Map,
+  BarChart3,
+  History,
+  Upload,
+  FileText,
+} from "lucide-react";
 
 // Вкладки навигации
-type TabId = 'dashboard' | 'input' | 'map' | 'charts' | 'history' | 'upload'
+type TabId = "dashboard" | "input" | "map" | "charts" | "history" | "upload";
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'dashboard', label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" /> },
-  { id: 'input', label: 'Ввод данных', icon: <FormInput className="h-4 w-4" /> },
-  { id: 'map', label: 'Карта', icon: <Map className="h-4 w-4" /> },
-  { id: 'charts', label: 'Графики', icon: <BarChart3 className="h-4 w-4" /> },
-  { id: 'history', label: 'История', icon: <History className="h-4 w-4" /> },
-  { id: 'upload', label: 'Загрузка', icon: <Upload className="h-4 w-4" /> },
-]
+  {
+    id: "dashboard",
+    label: "Дашборд",
+    icon: <LayoutDashboard className="h-4 w-4" />,
+  },
+  {
+    id: "input",
+    label: "Ввод данных",
+    icon: <FormInput className="h-4 w-4" />,
+  },
+  { id: "map", label: "Карта", icon: <Map className="h-4 w-4" /> },
+  { id: "charts", label: "Графики", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "history", label: "История", icon: <History className="h-4 w-4" /> },
+  { id: "upload", label: "Загрузка", icon: <Upload className="h-4 w-4" /> },
+];
 
 export default function App() {
   // Состояние вкладок
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard')
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
 
   // Хуки API
-  const { predict, loading: predictLoading, result: predictionResult } = usePrediction()
-  const { fetchHistory, loading: historyLoading, data: historyData } = useHistory()
-  const { fetchZones, loading: zonesLoading, zones: zonesData } = useZones()
-  const { fetchStats, loading: statsLoading, stats: statsData } = useStatistics()
-  const { uploadFile, loading: uploadLoading } = useFileUpload()
-  const { exportPdf, exportCsv, loading: exportLoading } = useExport()
+  const {
+    predict,
+    loading: predictLoading,
+    result: predictionResult,
+  } = usePrediction();
+  const {
+    fetchHistory,
+    loading: historyLoading,
+    data: historyData,
+  } = useHistory();
+  const { fetchZones, loading: zonesLoading, zones: zonesData } = useZones();
+  const {
+    fetchStats,
+    loading: statsLoading,
+    stats: statsData,
+  } = useStatistics();
+  const { uploadFile, loading: uploadLoading } = useFileUpload();
+  const { exportPdf, exportCsv, loading: exportLoading } = useExport();
 
   // Состояние пагинации
-  const [historyOffset, setHistoryOffset] = useState(0)
-  const pageSize = 20
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const pageSize = 20;
 
   // Загрузка данных при монтировании
   useEffect(() => {
-    fetchZones()
-    fetchStats(30)
-    fetchHistory({ limit: pageSize, offset: 0 })
-  }, [])
+    fetchZones();
+    fetchStats(30);
+    fetchHistory({ limit: pageSize, offset: 0 });
+  }, []);
 
   // Обработчик отправки формы
   const handlePredict = async (data: WeatherData) => {
-    await predict(data)
+    await predict(data);
     // Обновляем данные после прогноза
-    fetchZones()
-    fetchHistory({ limit: pageSize, offset: historyOffset })
-    fetchStats(30)
-  }
+    fetchZones();
+    fetchHistory({ limit: pageSize, offset: historyOffset });
+    fetchStats(30);
+  };
 
   // Обработчик загрузки файла
   const handleUpload = async (file: File) => {
-    const result = await uploadFile(file)
+    const result = await uploadFile(file);
     // Обновляем данные после загрузки
-    fetchZones()
-    fetchHistory({ limit: pageSize, offset: 0 })
-    fetchStats(30)
-    return result
-  }
+    fetchZones();
+    fetchHistory({ limit: pageSize, offset: 0 });
+    fetchStats(30);
+    return result;
+  };
 
   // Обработчик смены страницы истории
   const handlePageChange = (offset: number) => {
-    setHistoryOffset(offset)
-    fetchHistory({ limit: pageSize, offset })
-  }
+    setHistoryOffset(offset);
+    fetchHistory({ limit: pageSize, offset });
+  };
 
   // Получение текущего максимального уровня опасности
-  const getMaxDangerLevel = (): { level: DangerLevel; zone: RiskZone | null } => {
+  const getMaxDangerLevel = (): {
+    level: DangerLevel;
+    zone: RiskZone | null;
+  } => {
     if (!zonesData?.zones?.length) {
-      return { level: 'low', zone: null }
+      return { level: "low", zone: null };
     }
 
-    const dangerOrder: DangerLevel[] = ['low', 'medium', 'high', 'extreme']
-    let maxLevel: DangerLevel = 'low'
-    let maxZone: RiskZone | null = null
+    const dangerOrder: DangerLevel[] = ["low", "medium", "high", "extreme"];
+    let maxLevel: DangerLevel = "low";
+    let maxZone: RiskZone | null = null;
 
     for (const zone of zonesData.zones) {
-      const zoneIndex = dangerOrder.indexOf(zone.danger_level)
-      const maxIndex = dangerOrder.indexOf(maxLevel)
+      const zoneIndex = dangerOrder.indexOf(zone.danger_level);
+      const maxIndex = dangerOrder.indexOf(maxLevel);
       if (zoneIndex > maxIndex) {
-        maxLevel = zone.danger_level
-        maxZone = zone
+        maxLevel = zone.danger_level;
+        maxZone = zone;
       }
     }
 
-    return { level: maxLevel, zone: maxZone }
-  }
+    return { level: maxLevel, zone: maxZone };
+  };
 
-  const { level: maxDangerLevel, zone: maxDangerZone } = getMaxDangerLevel()
+  const { level: maxDangerLevel, zone: maxDangerZone } = getMaxDangerLevel();
 
   return (
     <div className="min-h-screen bg-[hsl(var(--background))]">
@@ -124,9 +166,10 @@ export default function App() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`
                   flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                  ${activeTab === tab.id
-                    ? 'border-[hsl(var(--primary))] text-[hsl(var(--foreground))]'
-                    : 'border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                  ${
+                    activeTab === tab.id
+                      ? "border-[hsl(var(--primary))] text-[hsl(var(--foreground))]"
+                      : "border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
                   }
                 `}
               >
@@ -141,7 +184,7 @@ export default function App() {
       {/* Основной контент */}
       <main className="container mx-auto px-4 py-6">
         {/* Дашборд */}
-        {activeTab === 'dashboard' && (
+        {activeTab === "dashboard" && (
           <div className="space-y-6">
             {/* Текущий уровень опасности */}
             <Card>
@@ -194,7 +237,7 @@ export default function App() {
         )}
 
         {/* Ввод данных */}
-        {activeTab === 'input' && (
+        {activeTab === "input" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WeatherForm onSubmit={handlePredict} loading={predictLoading} />
             {predictionResult && (
@@ -208,7 +251,7 @@ export default function App() {
         )}
 
         {/* Карта */}
-        {activeTab === 'map' && (
+        {activeTab === "map" && (
           <RiskMap
             zones={zonesData?.zones || []}
             loading={zonesLoading}
@@ -217,7 +260,7 @@ export default function App() {
         )}
 
         {/* Графики */}
-        {activeTab === 'charts' && (
+        {activeTab === "charts" && (
           <div className="space-y-6">
             {statsData?.data && <StatisticsCards stats={statsData.data} />}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -233,7 +276,7 @@ export default function App() {
         )}
 
         {/* История */}
-        {activeTab === 'history' && (
+        {activeTab === "history" && (
           <div className="space-y-4">
             <div className="flex justify-end">
               <Button
@@ -242,7 +285,7 @@ export default function App() {
                 disabled={exportLoading}
               >
                 <FileText className="h-4 w-4 mr-2" />
-                {exportLoading ? 'Экспорт...' : 'Экспорт всей истории в CSV'}
+                {exportLoading ? "Экспорт..." : "Экспорт всей истории в CSV"}
               </Button>
             </div>
             <HistoryTable
@@ -258,7 +301,7 @@ export default function App() {
         )}
 
         {/* Загрузка файлов */}
-        {activeTab === 'upload' && (
+        {activeTab === "upload" && (
           <div className="max-w-2xl mx-auto">
             <FileUpload onUpload={handleUpload} loading={uploadLoading} />
           </div>
@@ -268,10 +311,10 @@ export default function App() {
       {/* Футер */}
       <footer className="border-t py-6 mt-8">
         <div className="container mx-auto px-4 text-center text-sm text-[hsl(var(--muted-foreground))]">
-          <p>© 2024 Департамент по чрезвычайным ситуациям города Павлодар</p>
+          <p>© 2026 Департамент по чрезвычайным ситуациям города Павлодар</p>
           <p className="mt-1">Система прогнозирования лесных пожаров</p>
         </div>
       </footer>
     </div>
-  )
+  );
 }
