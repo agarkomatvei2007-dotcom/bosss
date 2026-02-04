@@ -1,0 +1,25 @@
+# FastAPI и ASGI сервер
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Работа с данными
+pandas==2.1.4
+numpy==1.26.3
+
+# База данных
+sqlalchemy==2.0.25
+
+# Загрузка файлов
+python-multipart==0.0.6
+
+# Работа с Excel
+openpyxl==3.1.2
+
+# Генерация PDF отчетов
+reportlab==4.0.8
+
+# CORS для связи с фронтендом
+pydantic==2.5.3
+
+# Дополнительные утилиты
+python-dateutil==2.8.2
