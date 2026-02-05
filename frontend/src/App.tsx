@@ -36,7 +36,7 @@ import type {
   DangerLevel,
 } from "@/types";
 import {
-  LayoutDashboard,
+  Home, // <-- ИЗМЕНЕНО: Новая иконка
   FormInput,
   Map,
   BarChart3,
@@ -51,8 +51,8 @@ type TabId = "dashboard" | "input" | "map" | "charts" | "history" | "upload";
 const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   {
     id: "dashboard",
-    label: "Дашборд",
-    icon: <LayoutDashboard className="h-4 w-4" />,
+    label: "Обзор", // <-- ИЗМЕНЕНО: Название вкладки
+    icon: <Home className="h-4 w-4" />, // <-- ИЗМЕНЕНО: Иконка вкладки
   },
   {
     id: "input",
@@ -183,7 +183,7 @@ export default function App() {
 
       {/* Основной контент */}
       <main className="container mx-auto px-4 py-6">
-        {/* Дашборд */}
+        {/* Дашборд (Обзор) */}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             {/* Текущий уровень опасности */}
