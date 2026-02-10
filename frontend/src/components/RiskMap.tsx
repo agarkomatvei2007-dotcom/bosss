@@ -1,78 +1,136 @@
 /**
- * Интерактивная карта зон риска
- * Павлодарская область
+ * Карта с отображением эллипса распространения пожара
+ * Баянаул и Щербакты
  */
 
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polygon, useMap } from 'react-leaflet'
+import L from 'leaflet'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { DangerBadge } from './DangerIndicator'
-import type { RiskZone } from '@/types'
-import { getDangerColor, formatDate } from '@/lib/utils'
-import { Map as MapIcon, RefreshCw } from 'lucide-react'
-import { Button } from './ui/button'
+import type { FireSpreadResult } from '@/types'
+import { Map as MapIcon } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
-// Центр Павлодарской области
-const PAVLODAR_CENTER: [number, number] = [52.3, 76.9]
-const DEFAULT_ZOOM = 8
+// Фикс иконки маркера leaflet
+delete (L.Icon.Default.prototype as any)._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+})
 
-interface RiskMapProps {
-  zones: RiskZone[]
-  loading?: boolean
-  onRefresh?: () => void
+// Центр между Баянаулом и Щербакты
+const MAP_CENTER: [number, number] = [51.5, 76.8]
+const DEFAULT_ZOOM = 7
+
+// Направление ветра → угол в градусах (куда дует)
+const windDirectionAngle: Record<string, number> = {
+  'С': 180,   // ветер с севера → пожар идет на юг
+  'СВ': 225,
+  'В': 270,
+  'ЮВ': 315,
+  'Ю': 0,
+  'ЮЗ': 45,
+  'З': 90,
+  'СЗ': 135,
 }
 
-// Компонент для управления масштабом
-function MapController({ zones }: { zones: RiskZone[] }) {
+interface RiskMapProps {
+  result: FireSpreadResult | null
+}
+
+// Генерация точек эллипса с учетом направления ветра
+function generateEllipsePoints(
+  lat: number,
+  lon: number,
+  semiMajor: number,  // м
+  semiMinor: number,  // м
+  centerOffset: number, // м — смещение центра вдоль ветра
+  windDir: string,
+  numPoints: number = 64
+): [number, number][] {
+  const angle = (windDirectionAngle[windDir] ?? 0) * Math.PI / 180
+  const points: [number, number][] = []
+
+  // Смещение центра эллипса от точки возгорания (вдоль направления ветра)
+  const offsetLat = centerOffset * Math.cos(angle) / 111320
+  const offsetLon = centerOffset * Math.sin(angle) / (111320 * Math.cos(lat * Math.PI / 180))
+
+  const centerLat = lat + offsetLat
+  const centerLon = lon + offsetLon
+
+  for (let i = 0; i <= numPoints; i++) {
+    const t = (2 * Math.PI * i) / numPoints
+
+    // Точка эллипса без поворота
+    const x = semiMajor * Math.cos(t)
+    const y = semiMinor * Math.sin(t)
+
+    // Поворот на угол ветра
+    const rotX = x * Math.cos(angle) - y * Math.sin(angle)
+    const rotY = x * Math.sin(angle) + y * Math.cos(angle)
+
+    // Перевод метров в градусы
+    const dLat = rotX / 111320
+    const dLon = rotY / (111320 * Math.cos(centerLat * Math.PI / 180))
+
+    points.push([centerLat + dLat, centerLon + dLon])
+  }
+
+  return points
+}
+
+// Автозум
+function MapController({ result }: { result: FireSpreadResult | null }) {
   const map = useMap()
 
   useEffect(() => {
-    if (zones.length > 0) {
-      const bounds = zones.map(z => [z.latitude, z.longitude] as [number, number])
-      map.fitBounds(bounds, { padding: [50, 50] })
+    if (result?.input_data.latitude && result?.input_data.longitude) {
+      const lat = result.input_data.latitude
+      const lon = result.input_data.longitude
+
+      if (result.semi_major > 0) {
+        const ellipsePoints = generateEllipsePoints(
+          lat, lon,
+          result.semi_major, result.semi_minor,
+          result.center_offset,
+          result.input_data.wind_direction
+        )
+        const bounds = L.latLngBounds(ellipsePoints.map(p => L.latLng(p[0], p[1])))
+        map.fitBounds(bounds, { padding: [60, 60] })
+      } else {
+        map.setView([lat, lon], 12)
+      }
     }
-  }, [zones, map])
+  }, [result, map])
 
   return null
 }
 
-// Радиус маркера в зависимости от уровня опасности
-function getMarkerRadius(level: string): number {
-  const sizes: Record<string, number> = {
-    low: 12,
-    medium: 15,
-    high: 18,
-    extreme: 22
-  }
-  return sizes[level] || 12
-}
+export function RiskMap({ result }: RiskMapProps) {
+  const ellipsePoints = result?.input_data.latitude && result?.input_data.longitude && result.semi_major > 0
+    ? generateEllipsePoints(
+        result.input_data.latitude,
+        result.input_data.longitude,
+        result.semi_major,
+        result.semi_minor,
+        result.center_offset,
+        result.input_data.wind_direction
+      )
+    : null
 
-export function RiskMap({ zones, loading, onRefresh }: RiskMapProps) {
   return (
     <Card className="w-full">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <MapIcon className="h-5 w-5" />
-            Карта зон риска
-          </CardTitle>
-          {onRefresh && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRefresh}
-              disabled={loading}
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-          )}
-        </div>
+        <CardTitle className="flex items-center gap-2">
+          <MapIcon className="h-5 w-5" />
+          Карта распространения пожара
+        </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="h-[400px] md:h-[500px] rounded-b-lg overflow-hidden">
+        <div className="h-[500px] md:h-[600px] rounded-b-lg overflow-hidden">
           <MapContainer
-            center={PAVLODAR_CENTER}
+            center={MAP_CENTER}
             zoom={DEFAULT_ZOOM}
             className="h-full w-full"
             scrollWheelZoom={true}
@@ -82,75 +140,68 @@ export function RiskMap({ zones, loading, onRefresh }: RiskMapProps) {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {zones.length > 0 && <MapController zones={zones} />}
+            <MapController result={result} />
 
-            {zones.map((zone) => (
-              <CircleMarker
-                key={zone.id}
-                center={[zone.latitude, zone.longitude]}
-                radius={getMarkerRadius(zone.danger_level)}
-                pathOptions={{
-                  color: getDangerColor(zone.danger_level),
-                  fillColor: getDangerColor(zone.danger_level),
-                  fillOpacity: 0.6,
-                  weight: 2
-                }}
-              >
+            {/* Маркеры лесов */}
+            <Marker position={[50.7933, 75.7003]}>
+              <Popup>
+                <strong>Баянаульский лес</strong>
+                <br />Баянаульский национальный парк
+              </Popup>
+            </Marker>
+            <Marker position={[52.3800, 78.0100]}>
+              <Popup>
+                <strong>Щербактинский лес</strong>
+                <br />Щербактинский лесной массив
+              </Popup>
+            </Marker>
+
+            {/* Точка возгорания */}
+            {result?.input_data.latitude && result?.input_data.longitude && (
+              <Marker position={[result.input_data.latitude, result.input_data.longitude]}>
                 <Popup>
-                  <div className="p-1 min-w-[200px]">
-                    <h3 className="font-bold text-base mb-2">{zone.name}</h3>
-                    <div className="mb-2">
-                      <DangerBadge level={zone.danger_level} />
-                    </div>
-                    <div className="text-sm space-y-1">
-                      <p>
-                        <span className="text-gray-500">Индекс Нестерова:</span>{' '}
-                        <strong>{zone.nesterov_index.toFixed(1)}</strong>
-                      </p>
-                      <p>
-                        <span className="text-gray-500">Индекс FWI:</span>{' '}
-                        <strong>{zone.fwi_index.toFixed(1)}</strong>
-                      </p>
-                      {zone.temperature !== undefined && (
-                        <p>
-                          <span className="text-gray-500">Температура:</span>{' '}
-                          <strong>{zone.temperature}°C</strong>
-                        </p>
-                      )}
-                      {zone.humidity !== undefined && (
-                        <p>
-                          <span className="text-gray-500">Влажность:</span>{' '}
-                          <strong>{zone.humidity}%</strong>
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-2">
-                        Обновлено: {formatDate(zone.last_updated)}
-                      </p>
-                    </div>
+                  <div className="min-w-[180px]">
+                    <strong>{result.input_data.location_name || 'Точка возгорания'}</strong>
+                    <br />
+                    <span className="text-xs">
+                      v₁={result.v1.toFixed(2)} м/мин | v₂={result.v2.toFixed(2)} | v₃={result.v3.toFixed(2)}
+                    </span>
+                    <br />
+                    <span className="text-xs">
+                      P={result.perimeter.toFixed(0)} м | S={result.area_ha >= 1 ? result.area_ha.toFixed(2) + ' га' : result.area.toFixed(0) + ' м²'}
+                    </span>
                   </div>
                 </Popup>
-              </CircleMarker>
-            ))}
+              </Marker>
+            )}
+
+            {/* Эллипс пожара */}
+            {ellipsePoints && (
+              <Polygon
+                positions={ellipsePoints}
+                pathOptions={{
+                  color: '#ef4444',
+                  fillColor: '#ef4444',
+                  fillOpacity: 0.25,
+                  weight: 2,
+                  dashArray: '5, 5',
+                }}
+              />
+            )}
           </MapContainer>
         </div>
 
         {/* Легенда */}
         <div className="p-4 border-t flex flex-wrap gap-4 justify-center text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-green-500"></div>
-            <span>Низкий</span>
+            <div className="w-4 h-4 rounded-full bg-red-500 opacity-40 border-2 border-red-500 border-dashed"></div>
+            <span>Зона распространения пожара</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-            <span>Средний</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-            <span>Высокий</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500"></div>
-            <span>Чрезвычайный</span>
+            <div className="w-4 h-4">
+              <img src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png" className="h-4" alt="" />
+            </div>
+            <span>Лесные массивы / Точка возгорания</span>
           </div>
         </div>
       </CardContent>

@@ -1,91 +1,49 @@
 """
-Модели данных для системы прогнозирования лесных пожаров
+Модели данных для системы расчета распространения лесных пожаров
 Департамент по чрезвычайным ситуациям города Павлодар
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
-from enum import Enum
 
 
-class VegetationType(str, Enum):
-    """Тип растительности"""
-    CONIFEROUS = "coniferous"  # Хвойный
-    DECIDUOUS = "deciduous"    # Лиственный
-    MIXED = "mixed"            # Смешанный
-
-
-class DangerLevel(str, Enum):
-    """Уровень пожарной опасности"""
-    LOW = "low"           # Низкий (зеленый)
-    MEDIUM = "medium"     # Средний (желтый)
-    HIGH = "high"         # Высокий (оранжевый)
-    EXTREME = "extreme"   # Чрезвычайный (красный)
-
-
-class WeatherData(BaseModel):
-    """Входные метеорологические данные"""
-    wind_speed: float = Field(..., ge=0, le=50, description="Скорость ветра (м/с)")
+class FireSpreadInput(BaseModel):
+    """Входные данные для расчета распространения пожара"""
+    E: float = Field(..., ge=0.0, le=1.0, description="Коэффициент черноты пламени (0-1)")
+    wind_speed: float = Field(..., ge=0, le=50, description="Скорость ветра под пологом леса на высоте 2 м (м/с)")
     wind_direction: str = Field(..., description="Направление ветра (С, СВ, В, ЮВ, Ю, ЮЗ, З, СЗ)")
-    temperature: float = Field(..., ge=-50, le=60, description="Температура воздуха (°C)")
-    humidity: float = Field(..., ge=0, le=100, description="Влажность воздуха (%)")
-    soil_moisture: float = Field(..., ge=0, le=100, description="Влажность почвы (%)")
-    vegetation_moisture: float = Field(..., ge=0, le=200, description="Влажность растительности (%)")
-    precipitation: float = Field(..., ge=0, description="Осадки за последние сутки (мм)")
-    vegetation_type: VegetationType = Field(..., description="Тип растительности")
+    rho: float = Field(..., gt=0, le=1000, description="Плотность сложения горючего материала (кг/м³)")
+    W: float = Field(..., ge=0, le=200, description="Влажность горючего материала (%)")
+    t: float = Field(..., gt=0, le=72, description="Время с начала пожара (часы)")
 
-    # Опциональные поля для расположения
-    location_name: Optional[str] = Field(None, description="Название точки наблюдения")
-    latitude: Optional[float] = Field(None, ge=-90, le=90, description="Широта")
-    longitude: Optional[float] = Field(None, ge=-180, le=180, description="Долгота")
+    # Локация
+    location_name: Optional[str] = Field(None, description="Название точки (Баянаул / Щербакты)")
+    latitude: Optional[float] = Field(None, ge=-90, le=90)
+    longitude: Optional[float] = Field(None, ge=-180, le=180)
 
 
-class PredictionResult(BaseModel):
-    """Результат прогнозирования"""
-    id: Optional[int] = None
+class FireSpreadResult(BaseModel):
+    """Результат расчета распространения пожара"""
     timestamp: datetime
+    input_data: FireSpreadInput
 
-    # Входные данные
-    input_data: WeatherData
+    # Скорости распространения (м/мин)
+    v1: float = Field(..., description="Скорость по фронту (м/мин)")
+    v2: float = Field(..., description="Скорость по флангу (м/мин)")
+    v3: float = Field(..., description="Скорость по тылу (м/мин)")
 
-    # Расчетные индексы
-    nesterov_index: float = Field(..., description="Индекс Нестерова")
-    fwi_index: float = Field(..., description="Канадский индекс FWI")
-    composite_index: float = Field(..., description="Комплексный индекс опасности")
+    # Периметр и площадь
+    perimeter: float = Field(..., description="Периметр кромки пожара (м)")
+    area: float = Field(..., description="Площадь пожара (м²)")
+    area_ha: float = Field(..., description="Площадь пожара (га)")
 
-    # Результат
-    danger_level: DangerLevel
-    danger_level_text: str
-    danger_level_color: str
+    # Расстояния за время t
+    d_front: float = Field(..., description="Расстояние по фронту (м)")
+    d_flank: float = Field(..., description="Расстояние по флангу (м)")
+    d_rear: float = Field(..., description="Расстояние по тылу (м)")
 
-    # Рекомендации
-    recommendations: List[str]
-
-
-class HistoricalData(BaseModel):
-    """Историческая запись"""
-    id: int
-    timestamp: datetime
-    location_name: Optional[str]
-    latitude: Optional[float]
-    longitude: Optional[float]
-    temperature: float
-    humidity: float
-    wind_speed: float
-    precipitation: float
-    nesterov_index: float
-    fwi_index: float
-    danger_level: str
-
-
-class ZoneRisk(BaseModel):
-    """Зона риска для отображения на карте"""
-    id: int
-    name: str
-    latitude: float
-    longitude: float
-    danger_level: DangerLevel
-    nesterov_index: float
-    fwi_index: float
-    last_updated: datetime
+    # Параметры эллипса для карты
+    semi_major: float = Field(..., description="Полуось эллипса по ветру (м)")
+    semi_minor: float = Field(..., description="Полуось эллипса перпендикулярно ветру (м)")
+    center_offset: float = Field(..., description="Смещение центра эллипса от точки возгорания (м)")

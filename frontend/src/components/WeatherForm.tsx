@@ -1,6 +1,5 @@
 /**
- * Форма ввода метеорологических данных
- * Система прогнозирования лесных пожаров
+ * Форма калькулятора распространения лесного пожара
  */
 
 import { useState } from 'react'
@@ -9,11 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import type { WeatherData, VegetationType, WindDirection } from '@/types'
-import { Thermometer, Droplets, Wind, Cloud, MapPin, Trees } from 'lucide-react'
+import type { FireSpreadInput, WindDirection } from '@/types'
+import { Flame, Wind, MapPin, Clock, Droplets } from 'lucide-react'
 
-interface WeatherFormProps {
-  onSubmit: (data: WeatherData) => void
+interface FireSpreadFormProps {
+  onSubmit: (data: FireSpreadInput) => void
   loading?: boolean
 }
 
@@ -28,64 +27,51 @@ const windDirections: { value: WindDirection; label: string }[] = [
   { value: 'СЗ', label: 'Северо-Запад (СЗ)' },
 ]
 
-const vegetationTypes: { value: VegetationType; label: string }[] = [
-  { value: 'coniferous', label: 'Хвойный лес' },
-  { value: 'deciduous', label: 'Лиственный лес' },
-  { value: 'mixed', label: 'Смешанный лес' },
+const forests = [
+  { name: 'Баянаульский лес', lat: 50.7933, lon: 75.7003 },
+  { name: 'Щербактинский лес', lat: 52.3800, lon: 78.0100 },
 ]
 
-const monitoringPoints = [
-  { name: 'Павлодар - Центр', lat: 52.2873, lon: 76.9674 },
-  { name: 'Баянаул', lat: 50.7933, lon: 75.7003 },
-  { name: 'Экибастуз', lat: 51.7231, lon: 75.3239 },
-  { name: 'Аксу', lat: 52.0414, lon: 76.9167 },
-  { name: 'Лесная зона Север', lat: 52.4500, lon: 76.8500 },
-  { name: 'Лесная зона Восток', lat: 52.3000, lon: 77.2000 },
-  { name: 'Иртышский район', lat: 52.0000, lon: 76.5000 },
-]
-
-export function WeatherForm({ onSubmit, loading }: WeatherFormProps) {
-  const [formData, setFormData] = useState<Partial<WeatherData>>({
-    temperature: 25,
-    humidity: 50,
-    wind_speed: 5,
+export function WeatherForm({ onSubmit, loading }: FireSpreadFormProps) {
+  const [formData, setFormData] = useState<Partial<FireSpreadInput>>({
+    E: 0.7,
+    wind_speed: 3,
     wind_direction: 'С',
-    precipitation: 0,
-    soil_moisture: 50,
-    vegetation_moisture: 100,
-    vegetation_type: 'mixed',
-    location_name: 'Павлодар - Центр',
-    latitude: 52.2873,
-    longitude: 76.9674,
+    rho: 40,
+    W: 25,
+    t: 1,
+    location_name: 'Баянаульский лес',
+    latitude: 50.7933,
+    longitude: 75.7003,
   })
 
-  const handleChange = (field: keyof WeatherData, value: string | number) => {
+  const handleChange = (field: keyof FireSpreadInput, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleLocationChange = (locationName: string) => {
-    const location = monitoringPoints.find(p => p.name === locationName)
-    if (location) {
+    const forest = forests.find(f => f.name === locationName)
+    if (forest) {
       setFormData(prev => ({
         ...prev,
-        location_name: location.name,
-        latitude: location.lat,
-        longitude: location.lon
+        location_name: forest.name,
+        latitude: forest.lat,
+        longitude: forest.lon,
       }))
     }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(formData as WeatherData)
+    onSubmit(formData as FireSpreadInput)
   }
 
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Thermometer className="h-5 w-5" />
-          Ввод метеорологических данных
+          <Flame className="h-5 w-5 text-orange-500" />
+          Калькулятор распространения пожара
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -94,54 +80,38 @@ export function WeatherForm({ onSubmit, loading }: WeatherFormProps) {
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <MapPin className="h-4 w-4" />
-              Точка наблюдения
+              Лесной массив
             </Label>
             <Select
               value={formData.location_name}
               onChange={(e) => handleLocationChange(e.target.value)}
-              options={monitoringPoints.map(p => ({ value: p.name, label: p.name }))}
+              options={forests.map(f => ({ value: f.name, label: f.name }))}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Температура */}
+            {/* E - коэффициент черноты пламени */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <Thermometer className="h-4 w-4 text-red-500" />
-                Температура воздуха (°C)
-              </Label>
-              <Input
-                type="number"
-                min="-50"
-                max="60"
-                step="0.1"
-                value={formData.temperature}
-                onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
-                required
-              />
-            </div>
-
-            {/* Влажность воздуха */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Droplets className="h-4 w-4 text-blue-500" />
-                Влажность воздуха (%)
+                <Flame className="h-4 w-4 text-orange-500" />
+                Коэфф. черноты пламени (E)
               </Label>
               <Input
                 type="number"
                 min="0"
-                max="100"
-                step="1"
-                value={formData.humidity}
-                onChange={(e) => handleChange('humidity', parseFloat(e.target.value))}
+                max="1"
+                step="0.01"
+                value={formData.E}
+                onChange={(e) => handleChange('E', parseFloat(e.target.value))}
                 required
               />
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">от 0 до 1</p>
             </div>
 
             {/* Скорость ветра */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <Wind className="h-4 w-4 text-gray-500" />
+                <Wind className="h-4 w-4 text-blue-500" />
                 Скорость ветра (м/с)
               </Label>
               <Input
@@ -153,12 +123,13 @@ export function WeatherForm({ onSubmit, loading }: WeatherFormProps) {
                 onChange={(e) => handleChange('wind_speed', parseFloat(e.target.value))}
                 required
               />
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">на высоте 2 м под пологом леса</p>
             </div>
 
             {/* Направление ветра */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <Wind className="h-4 w-4 text-gray-500" />
+                <Wind className="h-4 w-4 text-blue-500" />
                 Направление ветра
               </Label>
               <Select
@@ -168,72 +139,60 @@ export function WeatherForm({ onSubmit, loading }: WeatherFormProps) {
               />
             </div>
 
-            {/* Осадки */}
+            {/* Плотность горючего материала */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <Cloud className="h-4 w-4 text-blue-400" />
-                Осадки за сутки (мм)
+                <Flame className="h-4 w-4 text-red-500" />
+                {`Плотность горючего (кг/м\u00B3)`}
               </Label>
               <Input
                 type="number"
-                min="0"
-                max="500"
-                step="0.1"
-                value={formData.precipitation}
-                onChange={(e) => handleChange('precipitation', parseFloat(e.target.value))}
-                required
-              />
-            </div>
-
-            {/* Влажность почвы */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Droplets className="h-4 w-4 text-amber-700" />
-                Влажность почвы (%)
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
+                min="1"
+                max="1000"
                 step="1"
-                value={formData.soil_moisture}
-                onChange={(e) => handleChange('soil_moisture', parseFloat(e.target.value))}
+                value={formData.rho}
+                onChange={(e) => handleChange('rho', parseFloat(e.target.value))}
                 required
               />
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">{`\u03C1 \u2014 плотность сложения`}</p>
             </div>
 
-            {/* Влажность растительности */}
+            {/* Влажность горючего материала */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <Trees className="h-4 w-4 text-green-600" />
-                Влажность растительности (%)
+                <Droplets className="h-4 w-4 text-cyan-500" />
+                Влажность горючего (W, %)
               </Label>
               <Input
                 type="number"
                 min="0"
                 max="200"
                 step="1"
-                value={formData.vegetation_moisture}
-                onChange={(e) => handleChange('vegetation_moisture', parseFloat(e.target.value))}
+                value={formData.W}
+                onChange={(e) => handleChange('W', parseFloat(e.target.value))}
                 required
               />
             </div>
 
-            {/* Тип растительности */}
+            {/* Время */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <Trees className="h-4 w-4 text-green-600" />
-                Тип растительности
+                <Clock className="h-4 w-4 text-gray-500" />
+                Время с начала пожара (ч)
               </Label>
-              <Select
-                value={formData.vegetation_type}
-                onChange={(e) => handleChange('vegetation_type', e.target.value)}
-                options={vegetationTypes}
+              <Input
+                type="number"
+                min="0.1"
+                max="72"
+                step="0.1"
+                value={formData.t}
+                onChange={(e) => handleChange('t', parseFloat(e.target.value))}
+                required
               />
             </div>
           </div>
 
-          {/* Координаты */}
+          {/* Координаты (только для отображения) */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Широта</Label>
@@ -256,7 +215,7 @@ export function WeatherForm({ onSubmit, loading }: WeatherFormProps) {
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Расчет...' : 'Рассчитать прогноз'}
+            {loading ? 'Расчет...' : 'Рассчитать распространение'}
           </Button>
         </form>
       </CardContent>

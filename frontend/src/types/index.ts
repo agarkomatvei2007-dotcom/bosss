@@ -1,125 +1,53 @@
 /**
- * Типы данных для системы прогнозирования лесных пожаров
+ * Типы данных для калькулятора распространения лесных пожаров
  * Департамент по чрезвычайным ситуациям города Павлодар
  */
 
-// Тип растительности
-export type VegetationType = 'coniferous' | 'deciduous' | 'mixed'
-
-// Уровень опасности
-export type DangerLevel = 'low' | 'medium' | 'high' | 'extreme'
-
-// Направления ветра
 export type WindDirection = 'С' | 'СВ' | 'В' | 'ЮВ' | 'Ю' | 'ЮЗ' | 'З' | 'СЗ'
 
-// Входные данные о погоде
-export interface WeatherData {
-  wind_speed: number
-  wind_direction: WindDirection
-  temperature: number
-  humidity: number
-  soil_moisture: number
-  vegetation_moisture: number
-  precipitation: number
-  vegetation_type: VegetationType
+// Входные данные калькулятора
+export interface FireSpreadInput {
+  E: number                    // Коэффициент черноты пламени (0-1)
+  wind_speed: number           // Скорость ветра (м/с)
+  wind_direction: WindDirection // Направление ветра
+  rho: number                  // Плотность горючего материала (кг/м³)
+  W: number                    // Влажность горючего материала (%)
+  t: number                    // Время с начала пожара (часы)
   location_name?: string
   latitude?: number
   longitude?: number
 }
 
-// Результат прогноза
-export interface PredictionResult {
-  id: number
+// Результат расчета
+export interface FireSpreadResult {
   timestamp: string
-  input_data: WeatherData
-  nesterov_index: number
-  fwi_index: number
-  composite_index: number
-  danger_level: DangerLevel
-  danger_level_text: string
-  danger_level_color: string
-  recommendations: string[]
+  input_data: FireSpreadInput
+
+  // Скорости (м/мин)
+  v1: number
+  v2: number
+  v3: number
+
+  // Периметр и площадь
+  perimeter: number
+  area: number
+  area_ha: number
+
+  // Расстояния (м)
+  d_front: number
+  d_flank: number
+  d_rear: number
+
+  // Параметры эллипса для карты
+  semi_major: number
+  semi_minor: number
+  center_offset: number
 }
 
-// Историческая запись
-export interface HistoricalRecord {
-  id: number
-  timestamp: string
-  location_name?: string
-  latitude?: number
-  longitude?: number
-  temperature: number
-  humidity: number
-  wind_speed: number
-  wind_direction?: string
-  precipitation: number
-  soil_moisture?: number
-  vegetation_moisture?: number
-  vegetation_type?: string
-  nesterov_index: number
-  fwi_index: number
-  composite_index?: number
-  danger_level: DangerLevel
-  danger_level_text: string
-}
-
-// Зона риска для карты
-export interface RiskZone {
-  id: number
+// Лес для мониторинга
+export interface Forest {
   name: string
   latitude: number
   longitude: number
-  danger_level: DangerLevel
-  danger_level_text: string
-  nesterov_index: number
-  fwi_index: number
-  composite_index: number
-  temperature?: number
-  humidity?: number
-  last_updated: string
-}
-
-// Статистика
-export interface Statistics {
-  total: number
-  avg_temp: number
-  avg_humidity: number
-  avg_nesterov: number
-  avg_fwi: number
-  avg_composite: number
-  danger_distribution: Record<string, number>
-}
-
-// Ответ API с историей
-export interface HistoryResponse {
-  status: string
-  data: HistoricalRecord[]
-  count: number
-}
-
-// Ответ API с зонами
-export interface ZonesResponse {
-  status: string
-  zones: RiskZone[]
-}
-
-// Ответ API со статистикой
-export interface StatisticsResponse {
-  status: string
-  data: Statistics
-}
-
-// Результат загрузки файла
-export interface UploadResult {
-  status: string
-  message: string
-  results: {
-    id: number
-    location_name?: string
-    nesterov_index: number
-    fwi_index: number
-    composite_index: number
-    danger_level: string
-    danger_level_text: string
-  }[]
+  description: string
 }
