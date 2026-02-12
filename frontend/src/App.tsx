@@ -84,7 +84,9 @@ export default function App() {
         )}
 
         {/* Карта */}
-        {activeTab === "map" && <RiskMap result={result} />}
+        {activeTab === "map" && (
+          <RiskMap result={result} onCalculate={handleCalculate} loading={loading} />
+        )}
       </main>
 
       {/* Футер */}
