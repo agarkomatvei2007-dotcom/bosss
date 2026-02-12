@@ -1,14 +1,14 @@
 /**
- * Карта с отображением эллипса распространения пожара
- * Баянаул и Щербакты
+ * Карта с отображением масштаба распространения пожара
+ * Зоны опасности, направление ветра, расстояния
  */
 
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Polygon, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polygon, Circle, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import type { FireSpreadResult } from '@/types'
-import { Map as MapIcon } from 'lucide-react'
+import { Map as MapIcon, Flame, Wind, Ruler, TriangleAlert } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
 // Фикс иконки маркера leaflet
@@ -19,13 +19,26 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
+// Кастомная иконка пожара (SVG)
+const fireIcon = L.divIcon({
+  html: `<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#ef4444 0%,#dc2626 60%,transparent 100%);animation:pulse 2s ease-in-out infinite;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+    </svg>
+  </div>`,
+  className: '',
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+  popupAnchor: [0, -20],
+})
+
 // Центр между Баянаулом и Щербакты
 const MAP_CENTER: [number, number] = [51.5, 76.8]
 const DEFAULT_ZOOM = 7
 
-// Направление ветра → угол в градусах (куда дует)
+// Направление ветра → угол в радианах (куда дует / куда распространяется пожар)
 const windDirectionAngle: Record<string, number> = {
-  'С': 180,   // ветер с севера → пожар идет на юг
+  'С': 180,
   'СВ': 225,
   'В': 270,
   'ЮВ': 315,
@@ -35,24 +48,34 @@ const windDirectionAngle: Record<string, number> = {
   'СЗ': 135,
 }
 
+const windDirectionLabels: Record<string, string> = {
+  'С': 'Север',
+  'СВ': 'Северо-Восток',
+  'В': 'Восток',
+  'ЮВ': 'Юго-Восток',
+  'Ю': 'Юг',
+  'ЮЗ': 'Юго-Запад',
+  'З': 'Запад',
+  'СЗ': 'Северо-Запад',
+}
+
 interface RiskMapProps {
   result: FireSpreadResult | null
 }
 
-// Генерация точек эллипса с учетом направления ветра
+// Генерация точек эллипса с учётом направления ветра
 function generateEllipsePoints(
   lat: number,
   lon: number,
-  semiMajor: number,  // м
-  semiMinor: number,  // м
-  centerOffset: number, // м — смещение центра вдоль ветра
+  semiMajor: number,
+  semiMinor: number,
+  centerOffset: number,
   windDir: string,
   numPoints: number = 64
 ): [number, number][] {
   const angle = (windDirectionAngle[windDir] ?? 0) * Math.PI / 180
   const points: [number, number][] = []
 
-  // Смещение центра эллипса от точки возгорания (вдоль направления ветра)
   const offsetLat = centerOffset * Math.cos(angle) / 111320
   const offsetLon = centerOffset * Math.sin(angle) / (111320 * Math.cos(lat * Math.PI / 180))
 
@@ -61,16 +84,12 @@ function generateEllipsePoints(
 
   for (let i = 0; i <= numPoints; i++) {
     const t = (2 * Math.PI * i) / numPoints
-
-    // Точка эллипса без поворота
     const x = semiMajor * Math.cos(t)
     const y = semiMinor * Math.sin(t)
 
-    // Поворот на угол ветра
     const rotX = x * Math.cos(angle) - y * Math.sin(angle)
     const rotY = x * Math.sin(angle) + y * Math.cos(angle)
 
-    // Перевод метров в градусы
     const dLat = rotX / 111320
     const dLon = rotY / (111320 * Math.cos(centerLat * Math.PI / 180))
 
@@ -80,7 +99,15 @@ function generateEllipsePoints(
   return points
 }
 
-// Автозум
+// Генерация точки на расстоянии от центра по направлению
+function offsetPoint(lat: number, lon: number, distMeters: number, angleDeg: number): [number, number] {
+  const angleRad = angleDeg * Math.PI / 180
+  const dLat = distMeters * Math.cos(angleRad) / 111320
+  const dLon = distMeters * Math.sin(angleRad) / (111320 * Math.cos(lat * Math.PI / 180))
+  return [lat + dLat, lon + dLon]
+}
+
+// Автозум к эллипсу
 function MapController({ result }: { result: FireSpreadResult | null }) {
   const map = useMap()
 
@@ -97,7 +124,7 @@ function MapController({ result }: { result: FireSpreadResult | null }) {
           result.input_data.wind_direction
         )
         const bounds = L.latLngBounds(ellipsePoints.map(p => L.latLng(p[0], p[1])))
-        map.fitBounds(bounds, { padding: [60, 60] })
+        map.fitBounds(bounds, { padding: [80, 80] })
       } else {
         map.setView([lat, lon], 12)
       }
@@ -107,11 +134,60 @@ function MapController({ result }: { result: FireSpreadResult | null }) {
   return null
 }
 
+// Стрелка направления ветра на карте
+function WindArrow({ lat, lon, windDir, distance }: { lat: number; lon: number; windDir: string; distance: number }) {
+  const angleDeg = windDirectionAngle[windDir] ?? 0
+
+  // Линия от точки возгорания в направлении ветра
+  const arrowLen = distance * 1.3
+  const endPoint = offsetPoint(lat, lon, arrowLen, angleDeg)
+
+  // Наконечник стрелки
+  const arrowHeadLen = arrowLen * 0.12
+  const leftPoint = offsetPoint(endPoint[0], endPoint[1], arrowHeadLen, angleDeg + 150)
+  const rightPoint = offsetPoint(endPoint[0], endPoint[1], arrowHeadLen, angleDeg - 150)
+
+  return (
+    <>
+      <Polyline
+        positions={[[lat, lon], endPoint]}
+        pathOptions={{ color: '#3b82f6', weight: 2, dashArray: '8, 6', opacity: 0.7 }}
+      />
+      <Polyline
+        positions={[leftPoint, endPoint, rightPoint]}
+        pathOptions={{ color: '#3b82f6', weight: 2.5, opacity: 0.8 }}
+      />
+    </>
+  )
+}
+
+// Форматирование расстояний
+function formatDistance(meters: number): string {
+  if (meters >= 1000) return (meters / 1000).toFixed(2) + ' км'
+  return meters.toFixed(0) + ' м'
+}
+
+function formatArea(areaSqm: number, areaHa: number): string {
+  if (areaHa >= 1) return areaHa.toFixed(2) + ' га'
+  return areaSqm.toFixed(0) + ' м²'
+}
+
+// Определение уровня опасности
+function getDangerLevel(areaHa: number): { label: string; color: string; bg: string } {
+  if (areaHa >= 10) return { label: 'Критический', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-950' }
+  if (areaHa >= 1) return { label: 'Высокий', color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-950' }
+  if (areaHa >= 0.1) return { label: 'Средний', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-950' }
+  return { label: 'Низкий', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-950' }
+}
+
 export function RiskMap({ result }: RiskMapProps) {
-  const ellipsePoints = result?.input_data.latitude && result?.input_data.longitude && result.semi_major > 0
+  const hasResult = result?.input_data.latitude && result?.input_data.longitude && result.semi_major > 0
+
+  // Эллипс основной зоны пожара
+  const ellipsePoints = hasResult
     ? generateEllipsePoints(
-        result.input_data.latitude,
-        result.input_data.longitude,
+        result.input_data.latitude!,
+        result.input_data.longitude!,
         result.semi_major,
         result.semi_minor,
         result.center_offset,
@@ -119,89 +195,272 @@ export function RiskMap({ result }: RiskMapProps) {
       )
     : null
 
+  // Внутренняя зона — эпицентр (50% от размера)
+  const innerEllipsePoints = hasResult
+    ? generateEllipsePoints(
+        result.input_data.latitude!,
+        result.input_data.longitude!,
+        result.semi_major * 0.5,
+        result.semi_minor * 0.5,
+        result.center_offset * 0.5,
+        result.input_data.wind_direction
+      )
+    : null
+
+  // Зона угрозы — потенциальное распространение (+30%)
+  const outerEllipsePoints = hasResult
+    ? generateEllipsePoints(
+        result.input_data.latitude!,
+        result.input_data.longitude!,
+        result.semi_major * 1.3,
+        result.semi_minor * 1.3,
+        result.center_offset * 1.3,
+        result.input_data.wind_direction
+      )
+    : null
+
+  const danger = result ? getDangerLevel(result.area_ha) : null
+
   return (
     <Card className="w-full">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2">
-          <MapIcon className="h-5 w-5" />
-          Карта распространения пожара
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <MapIcon className="h-5 w-5" />
+            Карта распространения пожара
+          </CardTitle>
+          {result && danger && (
+            <span className={`text-xs font-bold px-3 py-1 rounded-full ${danger.bg} ${danger.color}`}>
+              {danger.label}
+            </span>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="h-[500px] md:h-[600px] rounded-b-lg overflow-hidden">
-          <MapContainer
-            center={MAP_CENTER}
-            zoom={DEFAULT_ZOOM}
-            className="h-full w-full"
-            scrollWheelZoom={true}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
+        <div className="relative">
+          <div className="h-[500px] md:h-[600px] overflow-hidden">
+            <MapContainer
+              center={MAP_CENTER}
+              zoom={DEFAULT_ZOOM}
+              className="h-full w-full"
+              scrollWheelZoom={true}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
 
-            <MapController result={result} />
+              <MapController result={result} />
 
-            {/* Маркеры лесов */}
-            <Marker position={[50.7933, 75.7003]}>
-              <Popup>
-                <strong>Баянаульский лес</strong>
-                <br />Баянаульский национальный парк
-              </Popup>
-            </Marker>
-            <Marker position={[52.3800, 78.0100]}>
-              <Popup>
-                <strong>Щербактинский лес</strong>
-                <br />Щербактинский лесной массив
-              </Popup>
-            </Marker>
-
-            {/* Точка возгорания */}
-            {result?.input_data.latitude && result?.input_data.longitude && (
-              <Marker position={[result.input_data.latitude, result.input_data.longitude]}>
+              {/* Маркеры лесов */}
+              <Marker position={[50.7933, 75.7003]}>
                 <Popup>
-                  <div className="min-w-[180px]">
-                    <strong>{result.input_data.location_name || 'Точка возгорания'}</strong>
-                    <br />
-                    <span className="text-xs">
-                      v₁={result.v1.toFixed(2)} м/мин | v₂={result.v2.toFixed(2)} | v₃={result.v3.toFixed(2)}
-                    </span>
-                    <br />
-                    <span className="text-xs">
-                      P={result.perimeter.toFixed(0)} м | S={result.area_ha >= 1 ? result.area_ha.toFixed(2) + ' га' : result.area.toFixed(0) + ' м²'}
-                    </span>
-                  </div>
+                  <strong>Баянаульский лес</strong>
+                  <br />Баянаульский национальный парк
                 </Popup>
               </Marker>
-            )}
+              <Marker position={[52.3800, 78.0100]}>
+                <Popup>
+                  <strong>Щербактинский лес</strong>
+                  <br />Щербактинский лесной массив
+                </Popup>
+              </Marker>
 
-            {/* Эллипс пожара */}
-            {ellipsePoints && (
-              <Polygon
-                positions={ellipsePoints}
-                pathOptions={{
-                  color: '#ef4444',
-                  fillColor: '#ef4444',
-                  fillOpacity: 0.25,
-                  weight: 2,
-                  dashArray: '5, 5',
-                }}
-              />
-            )}
-          </MapContainer>
+              {/* --- Визуализация пожара --- */}
+              {hasResult && (
+                <>
+                  {/* Зона угрозы (внешний контур +30%) */}
+                  {outerEllipsePoints && (
+                    <Polygon
+                      positions={outerEllipsePoints}
+                      pathOptions={{
+                        color: '#f59e0b',
+                        fillColor: '#fbbf24',
+                        fillOpacity: 0.08,
+                        weight: 1,
+                        dashArray: '4, 8',
+                      }}
+                    />
+                  )}
+
+                  {/* Основной эллипс — зона распространения */}
+                  {ellipsePoints && (
+                    <Polygon
+                      positions={ellipsePoints}
+                      pathOptions={{
+                        color: '#ef4444',
+                        fillColor: '#ef4444',
+                        fillOpacity: 0.15,
+                        weight: 2,
+                        dashArray: '6, 4',
+                      }}
+                    >
+                      <Popup>
+                        <div className="min-w-[200px] text-sm">
+                          <strong className="text-red-600">Зона пожара</strong>
+                          <br />
+                          Площадь: <b>{formatArea(result!.area, result!.area_ha)}</b>
+                          <br />
+                          Периметр: <b>{formatDistance(result!.perimeter)}</b>
+                          <br />
+                          Время: <b>{result!.input_data.t} ч</b>
+                        </div>
+                      </Popup>
+                    </Polygon>
+                  )}
+
+                  {/* Внутренняя зона — эпицентр */}
+                  {innerEllipsePoints && (
+                    <Polygon
+                      positions={innerEllipsePoints}
+                      pathOptions={{
+                        color: '#dc2626',
+                        fillColor: '#dc2626',
+                        fillOpacity: 0.3,
+                        weight: 1.5,
+                      }}
+                    >
+                      <Popup>
+                        <strong className="text-red-700">Эпицентр пожара</strong>
+                        <br />
+                        <span className="text-xs">Зона максимальной интенсивности горения</span>
+                      </Popup>
+                    </Polygon>
+                  )}
+
+                  {/* Точка возгорания — кастомный маркер */}
+                  <Marker
+                    position={[result!.input_data.latitude!, result!.input_data.longitude!]}
+                    icon={fireIcon}
+                  >
+                    <Popup>
+                      <div className="min-w-[220px]">
+                        <strong className="text-red-600">{result!.input_data.location_name || 'Точка возгорания'}</strong>
+                        <br />
+                        <span className="text-xs text-gray-600">
+                          {result!.input_data.latitude!.toFixed(4)}°N, {result!.input_data.longitude!.toFixed(4)}°E
+                        </span>
+                        <hr className="my-1" />
+                        <div className="text-xs space-y-0.5">
+                          <div>Фронт: <b className="text-red-600">{result!.v1.toFixed(2)} м/мин</b> ({formatDistance(result!.d_front)})</div>
+                          <div>Фланг: <b className="text-orange-600">{result!.v2.toFixed(2)} м/мин</b> ({formatDistance(result!.d_flank)})</div>
+                          <div>Тыл: <b className="text-yellow-600">{result!.v3.toFixed(2)} м/мин</b> ({formatDistance(result!.d_rear)})</div>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+
+                  {/* Радиус от точки возгорания (для масштаба) */}
+                  <Circle
+                    center={[result!.input_data.latitude!, result!.input_data.longitude!]}
+                    radius={Math.max(result!.d_front, result!.d_flank) * 0.05}
+                    pathOptions={{
+                      color: '#dc2626',
+                      fillColor: '#ef4444',
+                      fillOpacity: 0.6,
+                      weight: 0,
+                    }}
+                  />
+
+                  {/* Стрелка направления ветра */}
+                  <WindArrow
+                    lat={result!.input_data.latitude!}
+                    lon={result!.input_data.longitude!}
+                    windDir={result!.input_data.wind_direction}
+                    distance={result!.d_front}
+                  />
+                </>
+              )}
+            </MapContainer>
+          </div>
+
+          {/* Оверлей: нет данных */}
+          {!hasResult && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/5 backdrop-blur-[1px] z-[1000] pointer-events-none">
+              <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg p-6 text-center max-w-xs pointer-events-auto border">
+                <Flame className="h-10 w-10 text-orange-400 mx-auto mb-3" />
+                <p className="font-semibold text-sm">Нет данных для отображения</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                  Перейдите в «Калькулятор», введите параметры и нажмите «Рассчитать»
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Оверлей: инфо-панель с масштабом пожара */}
+          {hasResult && result && (
+            <div className="absolute top-3 right-3 z-[1000] bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm rounded-lg shadow-lg border p-3 max-w-[220px] text-xs">
+              <div className="font-bold text-sm mb-2 flex items-center gap-1.5">
+                <Ruler className="h-3.5 w-3.5" />
+                Масштаб пожара
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">Площадь:</span>
+                  <span className="font-bold">{formatArea(result.area, result.area_ha)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">Периметр:</span>
+                  <span className="font-bold">{formatDistance(result.perimeter)}</span>
+                </div>
+
+                <hr className="border-[hsl(var(--border))]" />
+
+                <div className="flex justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">По фронту:</span>
+                  <span className="font-bold text-red-600">{formatDistance(result.d_front)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">По флангу:</span>
+                  <span className="font-bold text-orange-600">{formatDistance(result.d_flank)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">По тылу:</span>
+                  <span className="font-bold text-yellow-600">{formatDistance(result.d_rear)}</span>
+                </div>
+
+                <hr className="border-[hsl(var(--border))]" />
+
+                <div className="flex items-center gap-1.5">
+                  <Wind className="h-3 w-3 text-blue-500" />
+                  <span className="text-[hsl(var(--muted-foreground))]">Ветер:</span>
+                  <span className="font-bold">
+                    {windDirectionLabels[result.input_data.wind_direction] || result.input_data.wind_direction}, {result.input_data.wind_speed} м/с
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <TriangleAlert className={`h-3 w-3 ${danger!.color}`} />
+                  <span className="text-[hsl(var(--muted-foreground))]">Уровень:</span>
+                  <span className={`font-bold ${danger!.color}`}>{danger!.label}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Легенда */}
-        <div className="p-4 border-t flex flex-wrap gap-4 justify-center text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500 opacity-40 border-2 border-red-500 border-dashed"></div>
-            <span>Зона распространения пожара</span>
+        <div className="p-3 border-t flex flex-wrap gap-x-5 gap-y-2 justify-center text-xs">
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-3 rounded-sm bg-red-600 opacity-30 border border-red-600"></div>
+            <span>Эпицентр</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4">
-              <img src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png" className="h-4" alt="" />
-            </div>
-            <span>Лесные массивы / Точка возгорания</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-3 rounded-sm bg-red-500 opacity-20 border border-red-500 border-dashed"></div>
+            <span>Зона пожара</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-3 rounded-sm bg-amber-400 opacity-15 border border-amber-500 border-dashed"></div>
+            <span>Зона угрозы</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-4 h-0.5 bg-blue-500 border-dashed"></div>
+            <span>Направление ветра</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'radial-gradient(circle, #ef4444, transparent)' }}></div>
+            <span>Точка возгорания</span>
           </div>
         </div>
       </CardContent>

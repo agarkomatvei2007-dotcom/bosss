@@ -33,6 +33,8 @@ export default function App() {
 
   const handleCalculate = async (data: FireSpreadInput) => {
     await calculate(data);
+    // Автопереход на карту после успешного расчёта
+    setActiveTab("map");
   };
 
   return (
