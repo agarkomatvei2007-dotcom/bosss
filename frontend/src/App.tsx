@@ -1,105 +1,44 @@
-/**
- * Калькулятор распространения лесных пожаров
- * Департамент по чрезвычайным ситуациям города Павлодар
- */
-
-import { useState } from "react";
 import { Header } from "@/components/Header";
-import { WeatherForm } from "@/components/WeatherForm";
-import { PredictionResultView } from "@/components/PredictionResult";
 import { RiskMap } from "@/components/RiskMap";
 import { useFireSpread } from "@/hooks/useApi";
-import type { FireSpreadInput } from "@/types";
-import { Flame, Map } from "lucide-react";
-
-type TabId = "calculator" | "map";
-
-const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  {
-    id: "calculator",
-    label: "Калькулятор",
-    icon: <Flame className="h-4 w-4" />,
-  },
-  {
-    id: "map",
-    label: "Карта",
-    icon: <Map className="h-4 w-4" />,
-  },
-];
+// import { Toaster } from "@/components/ui/toaster"; <--- УБРАЛИ ЭТО
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("calculator");
   const { calculate, loading, error, result } = useFireSpread();
 
-  const handleCalculate = async (data: FireSpreadInput) => {
-    await calculate(data);
-    // Автопереход на карту после успешного расчёта
-    setActiveTab("map");
-  };
-
   return (
-    <div className="min-h-screen bg-[#fcfdfe] text-slate-900 selection:bg-slate-200">
+    <div className="flex flex-col h-screen w-full bg-[#fcfdfe] overflow-hidden">
       <Header />
 
-      {/* Навигация */}
-      <nav className="border-b bg-[hsl(var(--background))]">
-        <div className="container mx-auto px-4">
-          <div className="flex overflow-x-auto scrollbar-none">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`
-                  flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap
-                  ${
-                    activeTab === tab.id
-                      ? "border-[hsl(var(--primary))] text-[hsl(var(--foreground))]"
-                      : "border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                  }
-                `}
+      <main className="flex-1 relative w-full h-full">
+        <RiskMap result={result} onCalculate={calculate} loading={loading} />
+
+        {/* Вместо Тостера выведем ошибку просто текстом поверх карты, если она есть */}
+        {error && (
+          <div className="absolute top-20 right-4 z-[2000] max-w-sm bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in slide-in-from-right">
+            <div className="bg-red-100 p-1 rounded-full">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                {tab.icon}
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </nav>
-
-      {/* Основной контент */}
-      <main className="container mx-auto px-4 py-6">
-        {/* Калькулятор */}
-        {activeTab === "calculator" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <WeatherForm onSubmit={handleCalculate} loading={loading} />
-            <div>
-              {error && (
-                <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 text-sm border border-red-200 dark:border-red-800">
-                  {error}
-                </div>
-              )}
-              {result && <PredictionResultView result={result} />}
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" x2="12" y1="8" y2="12" />
+                <line x1="12" x2="12.01" y1="16" y2="16" />
+              </svg>
             </div>
+            <div className="text-sm font-medium">{error}</div>
           </div>
-        )}
-
-        {/* Карта */}
-        {activeTab === "map" && (
-          <RiskMap result={result} onCalculate={handleCalculate} loading={loading} />
         )}
       </main>
 
-      {/* Футер */}
-      <footer className="border-t py-6 mt-8">
-        <div className="container mx-auto px-4 text-center text-sm text-[hsl(var(--muted-foreground))]">
-          <p>
-            Департамент по чрезвычайным ситуациям города Павлодар
-          </p>
-          <p className="mt-1">
-            Калькулятор распространения лесных пожаров
-          </p>
-        </div>
-      </footer>
+      {/* <Toaster /> <--- И ЭТО ТОЖЕ УБРАЛИ */}
     </div>
   );
 }
