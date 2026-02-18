@@ -125,3 +125,28 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.5);
 }
+
+/* Подписи пожара на карте (Leaflet Tooltip) */
+.fire-label {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 6px !important;
+  padding: 2px 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+  font-family: inherit !important;
+}
+.fire-label::before {
+  display: none !important;
+}
+
+.fire-label-main {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 2px solid #ef4444 !important;
+  border-radius: 10px !important;
+  padding: 6px 12px !important;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2) !important;
+  font-family: inherit !important;
+}
+.fire-label-main::before {
+  display: none !important;
+}
